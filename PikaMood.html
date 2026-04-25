@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#F59E0B"/>
+<meta name="description" content="PikaMood — Your wellness mood tracking companion. Gotta Track 'Em All."/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="PikaMood"/>
+<meta property="og:title" content="PikaMood"/>
+<meta property="og:description" content="Your wellness mood tracking companion — Gotta Track 'Em All"/>
+<meta property="og:type" content="website"/>
+<title>PikaMood — Gotta Track 'Em All</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet"/>
+<!-- Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- App config (fill in your keys here) -->
+<script src="supabase-config.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="PikachuFace.jsx"></script>
+<script type="text/babel" src="PikaIcons.jsx"></script>
+<script type="text/babel" src="AppState.jsx"></script>
+<script type="text/babel" src="DatabaseService.jsx"></script>
+<script type="text/babel" src="OnboardingScreen.jsx"></script>
+<script type="text/babel" src="HomeScreen.jsx"></script>
+<script type="text/babel" src="DiaryScreen.jsx"></script>
+<script type="text/babel" src="StatsScreen.jsx"></script>
+<script type="text/babel" src="SettingsScreen.jsx"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #111; font-family: 'Nunito', sans-serif; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  #root { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+  input, textarea, button, select { font-family: 'Nunito', sans-serif; }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  @keyframes slideDown {
+    from { transform: translateY(-30px); opacity: 0; }
+    to   { transform: translateY(0);     opacity: 1; }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+  @keyframes bounceIn {
+    from { transform: scale(0.4); opacity: 0; }
+    60%  { transform: scale(1.1); }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+  @keyframes floatUp {
+    from { transform: translateY(24px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+  @keyframes confettiFall {
+    0%,100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    50%      { transform: translateY(-18px) rotate(200deg); opacity: 0.6; }
+  }
+  @keyframes pikaPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,217,61,0.25); }
+    50%      { box-shadow: 0 0 0 14px rgba(255,217,61,0); }
+  }
+  @keyframes sheetIn {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .pika-cheek-pulse { animation: cheekPulse 2.2s ease-in-out infinite; }
+  @keyframes cheekPulse {
+    0%,100% { opacity: 0.9; } 50% { opacity: 0.45; }
+  }
+  .pika-sparks polygon { animation: sparkFlicker 1.6s ease-in-out infinite; }
+  @keyframes sparkFlicker {
+    0%,100% { opacity: 0.95; transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.65); }
+  }
+  @keyframes rippleOut {
+    from { transform: scale(0); opacity: 1; }
+    to   { transform: scale(2.5); opacity: 0; }
+  }
+  @keyframes tabPop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'pikamood_v1';
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (s.entries) s.entries = s.entries.map(e=>({...e, timestamp:new Date(e.timestamp)}));
+    return s;
+  } catch(e) { return null; }
+}
+function saveState(state) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+const saved = loadState();
+
+const DEFAULT_ENTRIES = [
+  { id:1, mood:'happy',      note:'Had a great morning walk!',           tags:['Personal','Health'], intensity:2, timestamp:new Date(Date.now()-2*3600*1000) },
+  { id:2, mood:'stressed',   note:'Big deadline today at work.',          tags:['Work'],              intensity:3, timestamp:new Date(Date.now()-26*3600*1000) },
+  { id:3, mood:'calm',       note:'',                                     tags:['Personal'],          intensity:1, timestamp:new Date(Date.now()-50*3600*1000) },
+  { id:4, mood:'excited',    note:'Weekend plans coming together!',       tags:['Social','Personal'], intensity:3, timestamp:new Date(Date.now()-74*3600*1000) },
+  { id:5, mood:'exhausted',  note:'Rough night of sleep...',              tags:['Health'],            intensity:2, timestamp:new Date(Date.now()-98*3600*1000) },
+  { id:6, mood:'grateful',   note:'Called my mom today, feeling warm.',   tags:['Personal'],          intensity:2, timestamp:new Date(Date.now()-122*3600*1000) },
+  { id:7, mood:'anxious',    note:'Big presentation coming up.',          tags:['Work'],              intensity:2, timestamp:new Date(Date.now()-146*3600*1000) },
+];
+
+// ── Profile Modal ─────────────────────────────────────────────────────────────
+function ProfileModal({ username, xp, streak, entries, unlockedIds, onClose, onLogout }) {
+  const t = useTheme();
+  const stage = getEvolutionStage(xp);
+  const progress = getEvolutionProgress(xp);
+  const totalMoods = entries.length;
+  const topMoodEntry = Object.entries(
+    entries.reduce((acc,e)=>{ acc[e.mood]=(acc[e.mood]||0)+1; return acc; }, {})
+  ).sort((a,b)=>b[1]-a[1])[0];
+
+  return (
+    <div style={{
+      position:'absolute', inset:0, zIndex:80,
+      background:t.overlay, display:'flex', alignItems:'flex-end',
+      animation:'fadeIn 0.2s ease',
+    }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{
+        width:'100%', background:t.surface,
+        borderRadius:'24px 24px 0 0',
+        border:`1.5px solid ${t.border}`,
+        animation:'sheetIn 0.3s cubic-bezier(0.32,0.72,0,1)',
+        paddingBottom:32,
+      }}>
+        {/* Handle */}
+        <div style={{ display:'flex', justifyContent:'center', paddingTop:10, paddingBottom:6 }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:t.border }}/>
+        </div>
+
+        {/* Header */}
+        <div style={{ padding:'8px 20px 16px', borderBottom:`1.5px solid ${t.border}` }}>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <div style={{
+              width:60, height:60, borderRadius:'50%',
+              background:'linear-gradient(135deg,#FFD93D,#F59E0B)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontFamily:'Nunito', fontWeight:900, fontSize:26, color:'#7C5A00',
+              border:'3px solid #F59E0B', flexShrink:0,
+            }}>{username.charAt(0).toUpperCase()}</div>
+            <div>
+              <div style={{ fontFamily:'Nunito', fontWeight:900, fontSize:20, color:t.textPrimary }}>{username}</div>
+              <div style={{ fontFamily:'Nunito', fontSize:12, color:t.textMuted, marginTop:2 }}>trainer@pikamood.app</div>
+              <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:4 }}>
+                <Icon name="lightning" size={12} color="#F59E0B"/>
+                <span style={{ fontFamily:'Nunito', fontWeight:800, fontSize:12, color:'#F59E0B' }}>
+                  {stage.name}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, padding:'16px 20px' }}>
+          {[
+            { label:'Check-ins', value:totalMoods, icon:'stats' },
+            { label:'Streak',    value:`${streak}d`, icon:'flame' },
+            { label:'XP',        value:xp, icon:'lightning' },
+          ].map(s=>(
+            <div key={s.label} style={{
+              background:t.elevated, borderRadius:14,
+              border:`1.5px solid ${t.border}`,
+              padding:'12px 8px', textAlign:'center',
+            }}>
+              <Icon name={s.icon} size={18} color="#F59E0B"/>
+              <div style={{ fontFamily:'Nunito', fontWeight:900, fontSize:20, color:t.textPrimary, marginTop:4 }}>
+                {s.value}
+              </div>
+              <div style={{ fontFamily:'Nunito', fontSize:11, color:t.textMuted, fontWeight:700 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Top mood */}
+        {topMoodEntry && (
+          <div style={{ margin:'0 20px 16px', padding:'12px 14px',
+            background:t.elevated, borderRadius:14, border:`1.5px solid ${t.border}`,
+            display:'flex', alignItems:'center', gap:12 }}>
+            <PikachuFace mood={topMoodEntry[0]} size={44}/>
+            <div>
+              <div style={{ fontFamily:'Nunito', fontSize:11, color:t.textMuted, fontWeight:700 }}>Most logged mood</div>
+              <div style={{ fontFamily:'Nunito', fontWeight:900, fontSize:16, color:t.textPrimary }}>
+                {MOOD_LABELS[topMoodEntry[0]]}
+              </div>
+              <div style={{ fontFamily:'Nunito', fontSize:11, color:t.textMuted }}>
+                {topMoodEntry[1]} times
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Evolution progress */}
+        <div style={{ margin:'0 20px 20px', padding:'12px 14px',
+          background:t.elevated, borderRadius:14, border:`1.5px solid ${t.border}` }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+            <span style={{ fontFamily:'Nunito', fontWeight:800, fontSize:13, color:t.textPrimary }}>
+              {stage.icon} {stage.name}
+            </span>
+            <span style={{ fontFamily:'Nunito', fontSize:12, color:t.textMuted, fontWeight:600 }}>{xp} XP</span>
+          </div>
+          <div style={{ background:t.isDark?'#4A3518':'#FFE082', borderRadius:5, height:7 }}>
+            <div style={{
+              height:'100%', width:`${progress}%`,
+              background:'linear-gradient(90deg,#FFD93D,#F59E0B)',
+              borderRadius:5, transition:'width 0.8s',
+            }}/>
+          </div>
+          <div style={{ fontFamily:'Nunito', fontSize:10, color:t.textMuted, marginTop:4 }}>
+            {progress}% to next stage
+          </div>
+        </div>
+
+        {/* Achievements */}
+        {unlockedIds.length > 0 && (
+          <div style={{ margin:'0 20px 20px' }}>
+            <div style={{ fontFamily:'Nunito', fontWeight:800, fontSize:13, color:t.textPrimary, marginBottom:8,
+              display:'flex', alignItems:'center', gap:6 }}>
+              <Icon name="star" size={14} color="#F59E0B"/>
+              Achievements ({unlockedIds.length}/{ACHIEVEMENTS.length})
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
+              {ACHIEVEMENTS.map(a => {
+                const unlocked = unlockedIds.includes(a.id);
+                return (
+                  <div key={a.id} title={a.desc} style={{
+                    width:40, height:40, borderRadius:12,
+                    background: unlocked ? 'linear-gradient(135deg,#FFD93D,#F59E0B)' : t.isDark?'#2D2210':'#F3F4F6',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:18, opacity: unlocked ? 1 : 0.3,
+                    border:`1.5px solid ${unlocked?'#F59E0B':t.border}`,
+                    transition:'all 0.2s',
+                  }}>{a.icon}</div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Log out */}
+        <div style={{ padding:'0 20px' }}>
+          <button onClick={onLogout} style={{
+            width:'100%', padding:'12px', borderRadius:12,
+            border:`1.5px solid ${t.border}`,
+            background:t.isDark?'#2D2210':'#FFF8DC',
+            color:t.textSecondary, cursor:'pointer',
+            fontFamily:'Nunito', fontWeight:800, fontSize:14,
+            display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+            transition:'background 0.15s',
+          }}>
+            <Icon name="logout" size={16} color={t.textSecondary}/>
+            Log Out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Achievement Toast ─────────────────────────────────────────────────────────
+function AchievementToast({ achievement, onDone }) {
+  const t = useTheme();
+  React.useEffect(() => {
+    haptic([20, 10, 20, 10, 40]);
+    const timer = setTimeout(onDone, 3200);
+    return () => clearTimeout(timer);
+  }, []);
+  return (
+    <div style={{
+      position:'absolute', top:56, left:16, right:16, zIndex:90,
+      background: t.isDark ? '#2D2210' : 'white',
+      border:`2px solid #F59E0B`,
+      borderRadius:18, padding:'12px 16px',
+      boxShadow:'0 8px 32px rgba(245,158,11,0.25)',
+      display:'flex', alignItems:'center', gap:12,
+      animation:'slideDown 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+    }}>
+      <div style={{
+        width:46, height:46, borderRadius:'50%', flexShrink:0,
+        background:'linear-gradient(135deg,#FFD93D,#F59E0B)',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:22,
+      }}>{achievement.icon}</div>
+      <div style={{ flex:1 }}>
+        <div style={{ fontFamily:'Nunito', fontWeight:900, fontSize:13, color:'#F59E0B' }}>
+          Achievement Unlocked!
+        </div>
+        <div style={{ fontFamily:'Nunito', fontWeight:800, fontSize:15, color:t.textPrimary }}>
+          {achievement.title}
+        </div>
+        <div style={{ fontFamily:'Nunito', fontSize:12, color:t.textMuted, fontWeight:600 }}>
+          {achievement.desc}
+          {achievement.xpBonus > 0 && <span style={{ color:'#F59E0B', fontWeight:800 }}> +{achievement.xpBonus} XP</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+function App() {
+  const [screen, setScreen]           = React.useState(saved?.screen || 'onboarding');
+  const [activeTab, setActiveTab]     = React.useState('home');
+  const [username, setUsername]       = React.useState(saved?.username || 'Trainer');
+  const [email, setEmail]             = React.useState(saved?.email || '');
+  const [entries, setEntries]         = React.useState(saved?.entries || DEFAULT_ENTRIES);
+  const [xp, setXp]                   = React.useState(saved?.xp || 150);
+  const [streak, setStreak]           = React.useState(saved?.streak || 7);
+  const [darkMode, setDarkMode]       = React.useState(saved?.darkMode || false);
+  const [unlockedAchievements, setUnlocked] = React.useState(saved?.achievements || []);
+  const [newAchievement, setNewAchievement] = React.useState(null);
+  const [showProfile, setShowProfile] = React.useState(false);
+  const [prevTab, setPrevTab]         = React.useState('home');
+  const [tabTransition, setTabTransition] = React.useState(false);
+
+  // Persist state on every change
+  React.useEffect(() => {
+    if (screen === 'app') {
+      saveState({ screen, username, email, entries, xp, streak, darkMode, achievements: unlockedAchievements });
+    }
+  }, [screen, username, email, entries, xp, streak, darkMode, unlockedAchievements]);
+
+  const theme = darkMode ? THEMES.dark : THEMES.light;
+
+  // Streak nudge notification — fires at 8pm if no check-in today
+  React.useEffect(() => {
+    if (screen !== 'app') return;
+    const checkNudge = () => {
+      const h = new Date().getHours();
+      if (h < 20) return;
+      const todayStr = new Date().toDateString();
+      const checkedInToday = entries.some(e => new Date(e.timestamp).toDateString() === todayStr);
+      if (!checkedInToday && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification('PikaMood ⚡', {
+          body: `Pika pika! Don't break your ${streak}-day streak! Log your mood now.`,
+        });
+      }
+    };
+    const interval = setInterval(checkNudge, 60 * 60 * 1000); // check every hour
+    return () => clearInterval(interval);
+  }, [screen, entries, streak]);
+
+  const handleLogin = (name, userEmail) => {
+    haptic([15, 5, 15]);
+    setUsername(name||'Trainer');
+    setEmail(userEmail||'');
+    setScreen('app');
+  };
+
+  const handleTabChange = (tab) => {
+    if (tab === activeTab) return;
+    setPrevTab(activeTab);
+    setTabTransition(true);
+    setTimeout(() => {
+      setActiveTab(tab);
+      setTabTransition(false);
+    }, 120);
+  };
+
+  const handleCheckin = (data, xpGained) => {
+    haptic([10, 5, 10]);
+    const newEntry = {
+      id:Date.now(), mood:data.mood, note:data.note||'',
+      tags:data.tags||[], intensity:data.intensity||0, timestamp:new Date(),
+    };
+    const newEntries = [newEntry, ...entries];
+    const todayStr = new Date().toDateString();
+    const lastEntry = entries[0];
+    const newStreak = (!lastEntry || new Date(lastEntry.timestamp).toDateString() !== todayStr)
+      ? streak + 1 : streak;
+    const newXp = xp + xpGained;
+    setEntries(newEntries);
+    setXp(newXp);
+    setStreak(newStreak);
+    // Check achievements
+    const newly = checkAchievements(newEntries, newStreak, unlockedAchievements);
+    if (newly.length > 0) {
+      const bonus = newly.reduce((sum, a) => sum + a.xpBonus, 0);
+      setUnlocked(prev => [...prev, ...newly.map(a => a.id)]);
+      if (bonus > 0) setXp(p => p + bonus);
+      setTimeout(() => setNewAchievement(newly[0]), 1200);
+    }
+  };
+
+  const handleEditEntry = (updated) => {
+    setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+  };
+
+  const handleLogout = () => {
+    setShowProfile(false);
+    setScreen('login');
+    setActiveTab('home');
+  };
+
+  const handleDeleteAccount = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setEntries([]); setXp(0); setStreak(0);
+    setUsername('Trainer'); setEmail('');
+    setUnlocked([]); setScreen('onboarding'); setActiveTab('home');
+  };
+
+  // Status bar bg matches screen
+  const statusBg = screen==='app' ? theme.elevated
+    : darkMode ? '#1A1209' : '#FFFDE7';
+
+  return (
+    <ThemeContext.Provider value={theme}>
+      <div style={{
+        width:390, height:780,
+        borderRadius:48,
+        background:'#1C1C1E',
+        boxShadow:'0 40px 120px rgba(0,0,0,0.75), inset 0 0 0 1.5px rgba(255,255,255,0.07)',
+        overflow:'hidden',
+        display:'flex', flexDirection:'column',
+        position:'relative',
+      }}>
+        {/* Status bar */}
+        <div style={{
+          height:44, background:statusBg,
+          display:'flex', alignItems:'center', justifyContent:'space-between',
+          padding:'0 24px', flexShrink:0, position:'relative',
+          borderBottom: screen==='app' ? `1px solid ${theme.border}` : 'none',
+          transition:'background 0.3s',
+        }}>
+          <span style={{ fontFamily:'Nunito', fontWeight:800, fontSize:13, color:theme.textPrimary }}>9:41</span>
+          {/* Dynamic island */}
+          <div style={{
+            width:110, height:28, borderRadius:20, background:'#000',
+            position:'absolute', left:'50%', transform:'translateX(-50%)', top:8,
+          }}/>
+          <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+            <Icon name="stats" size={13} color={theme.textPrimary} strokeWidth={2}/>
+            <Icon name="lightning" size={13} color={theme.textPrimary}/>
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div style={{ flex:1, overflow:'hidden', position:'relative', display:'flex', flexDirection:'column' }}>
+          {screen==='onboarding' && (
+            <OnboardingScreen onDone={()=>setScreen('login')}/>
+          )}
+          {screen==='login' && (
+            <LoginScreen onLogin={handleLogin}/>
+          )}
+          {screen==='app' && (
+            <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', position:'relative' }}>
+              <div style={{
+                flex:1, overflow:'hidden', position:'relative',
+                opacity: tabTransition ? 0 : 1,
+                transform: tabTransition ? 'translateY(6px)' : 'translateY(0)',
+                transition: tabTransition ? 'none' : 'opacity 0.18s ease, transform 0.18s ease',
+              }}>
+                {activeTab==='home' && (
+                  <HomeScreen
+                    username={username} entries={entries}
+                    xp={xp} streak={streak}
+                    onCheckin={handleCheckin}
+                    setActiveTab={handleTabChange}
+                    onAvatarPress={()=>setShowProfile(true)}
+                  />
+                )}
+                {activeTab==='diary' && <DiaryScreen entries={entries} onEditEntry={handleEditEntry}/>}
+                {activeTab==='stats' && <StatsScreen entries={entries} xp={xp} streak={streak}/>}
+                {activeTab==='settings' && (
+                  <SettingsScreen
+                    username={username} email={email}
+                    setUsername={setUsername}
+                    darkMode={darkMode} setDarkMode={setDarkMode}
+                    onLogout={handleLogout}
+                    onDeleteAccount={handleDeleteAccount}
+                    onViewProfile={()=>setShowProfile(true)}
+                    entries={entries} xp={xp} streak={streak}
+                  />
+                )}
+              </div>
+              <BottomNav activeTab={activeTab} setActiveTab={handleTabChange}/>
+
+              {/* Achievement toast */}
+              {newAchievement && (
+                <AchievementToast achievement={newAchievement} onDone={()=>setNewAchievement(null)}/>
+              )}
+
+              {/* Profile modal */}
+              {showProfile && (
+                <ProfileModal
+                  username={username} xp={xp} streak={streak} entries={entries}
+                  unlockedIds={unlockedAchievements}
+                  onClose={()=>setShowProfile(false)}
+                  onLogout={handleLogout}
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Home indicator */}
+        <div style={{
+          height:26, background:statusBg,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          flexShrink:0, transition:'background 0.3s',
+        }}>
+          <div style={{ width:96, height:4, background:theme.textPrimary, borderRadius:2, opacity:0.2 }}/>
+        </div>
+      </div>
+    </ThemeContext.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+<script>
+// ── PWA: Service Worker Registration ─────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('[PikaMood] SW registered:', reg.scope))
+      .catch(err => console.log('[PikaMood] SW registration failed:', err));
+  });
+}
+
+// ── PWA: Install prompt ───────────────────────────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show install banner after 30 seconds if not installed
+  setTimeout(() => {
+    if (deferredInstallPrompt) {
+      window.__showInstallPrompt?.();
+    }
+  }, 30000);
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  console.log('[PikaMood] PWA installed!');
+});
+window.triggerInstall = () => {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(choice => {
+      deferredInstallPrompt = null;
+    });
+  }
+};
+
+// ── DB Init ───────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.DB) window.DB.init();
+});
+
+// ── Online/offline banner ─────────────────────────────────────────
+function showOfflineBanner(show) {
+  let banner = document.getElementById('offline-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'offline-banner';
+    banner.style.cssText = `
+      position:fixed; top:0; left:50%; transform:translateX(-50%);
+      background:#F59E0B; color:#7C5A00;
+      font-family:Nunito,sans-serif; font-weight:800; font-size:13px;
+      padding:6px 20px; border-radius:0 0 12px 12px;
+      z-index:9999; transition:all 0.3s;
+      box-shadow:0 2px 8px rgba(0,0,0,0.15);
+    `;
+    document.body.appendChild(banner);
+  }
+  banner.textContent = show ? '⚡ Offline — changes saved locally' : '⚡ Back online — syncing...';
+  banner.style.display = show || navigator.onLine === false ? 'block' : 'none';
+  if (!show) setTimeout(() => { if(banner) banner.style.display='none'; }, 2000);
+}
+window.addEventListener('offline', () => showOfflineBanner(true));
+window.addEventListener('online',  () => showOfflineBanner(false));
+</script>
+</body>
+</html>
